@@ -1,0 +1,1 @@
+{"version":"0.0.0","name":"discord-whitelist","dependencies":{"cookie-parser":{"version":"1.4.6"},"debug":{"version":"2.6.9"},"dotenv":{"version":"16.0.0"},"express":{"version":"4.16.4"},"morgan":{"version":"1.9.1"},"supports-color":{"version":"9.2.1"},"tweetnacl":{"version":"1.0.3"}}}
