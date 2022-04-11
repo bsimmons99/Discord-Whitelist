@@ -230,7 +230,7 @@ async function registerCommands() {
     const token = JSON.parse(await getToken());
     // debug(token);
 
-    const guild_id = '266167522988916736';
+    const guild_id = '266167522988916736'; //Sanctuary
     // const url = `https://discord.com/api/v8/applications/${APPLICATION_ID}/guilds/${guild_id}/commands`;
     // const url = `https://discord.com/api/v8/applications/${APPLICATION_ID}/commands`;
 
