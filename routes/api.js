@@ -27,6 +27,65 @@ const dbpool = mariadb.createPool(
     }
 );
 
+function insertString(input, index, insersion) {
+    return input.slice(0, index) + insersion + input.slice(index);
+}
+
+function xuidToUuid(xuid) {
+    if (xuid === null) return null;
+    //Convert to number
+    xuid = parseInt(xuid);
+    //Convert to HEX
+    let uuid = xuid.toString(16);
+
+    //Will do weird things if the uuid is longer than 32, however I have not seen it longer than 13
+
+    //Pad to length 32 but prepending 0's
+    uuid = uuid.padStart(32, '0');
+
+    //Insert hyphens for UUID format
+    uuid = insertString(uuid, 8, '-');
+    uuid = insertString(uuid, 13, '-');
+    uuid = insertString(uuid, 18, '-');
+    uuid = insertString(uuid, 23, '-');
+
+    //Return result
+    return uuid;
+}
+
+async function usernameToXuid(username) {
+    //Setup request options, including auth
+    const options = {
+        method: 'GET',
+        headers: {
+            'X-AUTH': process.env.XAPI_AUTH
+        }
+    };
+    //Send request and return response
+    try {
+        return await new Promise((resolve, reject) => {
+            const req = https.request(`https://xapi.us/v2/xuid/${username}`, options, (res) => {
+                if (res.statusCode === 404) {
+                    return reject(404);
+                }
+                let data = '';
+                res.on('data', (stream) => {
+                    data += stream;
+                });
+                res.on('end', () => {
+                    resolve(data);
+                });
+            });
+            req.end();
+        });
+
+    } catch (error) {
+        if (error === 404) {
+            return null;
+        }
+    }
+}
+
 router.post('/interactions', function (req, res, next) {
     const signature = req.get('X-Signature-Ed25519');
     const timestamp = req.get('X-Signature-Timestamp');
@@ -94,7 +153,7 @@ router.post('/interactions', async function (req, res) {
                     tcon.year = tcon.day * 365;
 
                     let activityRequirement = lastWhiteList.getTime() + tcon.day * 3 <= Date.now();
-                    const helpRoleID = process.env.DISCORD_HELP_ROLE;
+                    const helpChannelID = process.env.DISCORD_HELP_CHANNEL;
 
                     if (!activityRequirement) {
                         if (!lastWhiteListDB) {
@@ -109,7 +168,7 @@ router.post('/interactions', async function (req, res) {
                     } else {
                         if (platform === 'java') {
                             message = `Attempting to whitelist \`${username}\` on \`${platform}\``;
-                            
+
                             const rconResponse = await rcon.send(`whitelist add ${username}`);
                             if (rconResponse.includes('That player does not exist')) { //Could not find player
                                 message = `Could not find that username (\`${username}\`), please check your username and spelling, then try again.`;
@@ -119,8 +178,22 @@ router.post('/interactions', async function (req, res) {
                                 message = `Success! \`${username}\` has been added to the whitelist.`;
                                 await conn.query('INSERT INTO `User` (`discord_id`, `mc_username`, `platform`) VALUES (?, ?, "java");', [req.body.member.user.id, username]);
                             }
+                        } else if (platform === 'bedrock') {
+                            let uuid = xuidToUuid(await usernameToXuid(username));
+
+                            if (uuid === null) {
+                                message = `Could not find that username (\`${username}\`), please check your username and spelling, then try again.`;
+                            } else {
+                                const rconResponse = await rcon.send(`fwhitelist add ${uuid}`);
+                                if (rconResponse.includes('was already whitelisted')) { //Already whitelisted
+                                    message = `\`${username}\` is already on the whitelist!`;
+                                } else if (rconResponse.includes('has been added to the whitelist!')) { //Success
+                                    message = `Success! \`${username}\` has been added to the whitelist.`;
+                                    await conn.query('INSERT INTO `User` (`discord_id`, `mc_username`, `platform`, `mc_uuid`) VALUES (?, ?, "bedrock", ?);', [req.body.member.user.id, username, uuid]);
+                                }
+                            }
                         } else {
-                            message = `You are on Bedrock, please contact <@&${helpRoleID}> for help.`;
+                            message = `Something went wrong, please react to \`Angel SMP Support\` in <@#${helpChannelID}> for help.`;
                         }
                     }
 
