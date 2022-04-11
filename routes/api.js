@@ -31,6 +31,14 @@ function insertString(input, index, insersion) {
     return input.slice(0, index) + insersion + input.slice(index);
 }
 
+function formatUuid(uuid) {
+    uuid = insertString(uuid, 8, '-');
+    uuid = insertString(uuid, 13, '-');
+    uuid = insertString(uuid, 18, '-');
+    uuid = insertString(uuid, 23, '-');
+    return uuid;
+}
+
 function xuidToUuid(xuid) {
     if (xuid === null) return null;
     //Convert to number
@@ -44,10 +52,7 @@ function xuidToUuid(xuid) {
     uuid = uuid.padStart(32, '0');
 
     //Insert hyphens for UUID format
-    uuid = insertString(uuid, 8, '-');
-    uuid = insertString(uuid, 13, '-');
-    uuid = insertString(uuid, 18, '-');
-    uuid = insertString(uuid, 23, '-');
+    uuid = formatUuid(uuid);
 
     //Return result
     return uuid;
@@ -84,6 +89,30 @@ async function usernameToXuid(username) {
             return null;
         }
     }
+}
+
+function mojangNameToUUID(username) {
+    return new Promise((resolve, reject) => {
+        const apiReq = https.request(`https://api.mojang.com/users/profiles/minecraft/${username}`, (res) => {
+            let data = '';
+            res.on('data', function (stream) {
+                data += stream;
+            });
+            res.on('end', function () {
+                if (res.statusCode === 204) {
+                    resolve({});
+                    return;
+                }
+                data = JSON.parse(data);
+                if ('error' in data) {
+                    reject(data);
+                } else {
+                    resolve(data);
+                }
+            });
+        });
+        apiReq.end();
+    });
 }
 
 router.post('/interactions', function (req, res, next) {
@@ -176,7 +205,9 @@ router.post('/interactions', async function (req, res) {
                                 message = `\`${username}\` is already on the whitelist!`;
                             } else if (rconResponse.includes('to the whitelist')) { //Success
                                 message = `Success! \`${username}\` has been added to the whitelist.`;
-                                await conn.query('INSERT INTO `User` (`discord_id`, `mc_username`, `platform`) VALUES (?, ?, "java");', [req.body.member.user.id, username]);
+                                const playerdata = await mojangNameToUUID(username);
+                                const uuid = formatUuid(playerdata.id);
+                                await conn.query('INSERT INTO `User` (`discord_id`, `mc_username`, `platform`, `mc_uuid`) VALUES (?, ?, "java", ?);', [req.body.member.user.id, username, uuid]);
                             }
                         } else if (platform === 'bedrock') {
                             let uuid = xuidToUuid(await usernameToXuid(username));
