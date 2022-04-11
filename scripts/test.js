@@ -68,16 +68,45 @@ async function usernameToXuid(username) {
     }
 }
 
+
+
+
+function mojangNameToUUID(username) {
+    return new Promise((resolve, reject) => {
+        const apiReq = https.request(`https://api.mojang.com/users/profiles/minecraft/${username}`, (res) => {
+            let data = '';
+            res.on('data', function (stream) {
+                data += stream;
+            });
+            res.on('end', function () {
+                if (res.statusCode === 204) {
+                    resolve({});
+                    return;
+                }
+                data = JSON.parse(data);
+                if ('error' in data) {
+                    reject(data);
+                } else {
+                    resolve(data);
+                }
+            });
+        });
+        apiReq.end();
+    });
+}
+
 async function init2() {
-    await rcon.connect(process.env.RCON_ADDRESS, process.env.RCON_PORT, process.env.RCON_PASSWORD);
-    // const rconResponse = await rcon.send(`fwhitelist add 00000000-0000-0000-0009-01fdebad513c`);
-    const rconResponse = await rcon.send(`fwhitelist add 00000000-0000-0000-0009-01fde000013c`);
-    rcon.end();
-    debug(rconResponse);
+    // await rcon.connect(process.env.RCON_ADDRESS, process.env.RCON_PORT, process.env.RCON_PASSWORD);
+    // // const rconResponse = await rcon.send(`fwhitelist add 00000000-0000-0000-0009-01fdebad513c`);
+    // const rconResponse = await rcon.send(`fwhitelist add 00000000-0000-0000-0009-01fde000013c`);
+    // rcon.end();
+    // debug(rconResponse);
 
     // const username = 'eletric99sssss4172';
     // let uuid = xuidToUuid(await usernameToXuid(username));
     // debug(uuid);
+    let uuid = await mojangNameToUUID('eletric99');
+    debug(uuid);
 }
 
 init2();
