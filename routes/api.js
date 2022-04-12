@@ -15,6 +15,7 @@ const rcon = new Rcon();
 const PUBLIC_KEY = process.env.PUBLIC_KEY;
 const APPLICATION_ID = process.env.APPLICATION_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const helpChannelID = process.env.DISCORD_HELP_CHANNEL;
 
 const dbpool = mariadb.createPool(
     {
@@ -27,68 +28,20 @@ const dbpool = mariadb.createPool(
     }
 );
 
-function insertString(input, index, insersion) {
-    return input.slice(0, index) + insersion + input.slice(index);
-}
-
-function formatUuid(uuid) {
-    uuid = insertString(uuid, 8, '-');
-    uuid = insertString(uuid, 13, '-');
-    uuid = insertString(uuid, 18, '-');
-    uuid = insertString(uuid, 23, '-');
-    return uuid;
-}
-
-function xuidToUuid(xuid) {
-    if (xuid === null) return null;
-    //Convert to number
-    xuid = parseInt(xuid);
-    //Convert to HEX
-    let uuid = xuid.toString(16);
-
-    //Will do weird things if the uuid is longer than 32, however I have not seen it longer than 13
-
-    //Pad to length 32 but prepending 0's
-    uuid = uuid.padStart(32, '0');
-
-    //Insert hyphens for UUID format
-    uuid = formatUuid(uuid);
-
-    //Return result
-    return uuid;
-}
-
-async function usernameToXuid(username) {
-    //Setup request options, including auth
-    const options = {
-        method: 'GET',
-        headers: {
-            'X-AUTH': process.env.XAPI_AUTH
-        }
-    };
-    //Send request and return response
-    try {
-        return await new Promise((resolve, reject) => {
-            const req = https.request(`https://xapi.us/v2/xuid/${username}`, options, (res) => {
-                if (res.statusCode === 404) {
-                    return reject(404);
-                }
-                let data = '';
-                res.on('data', (stream) => {
-                    data += stream;
-                });
-                res.on('end', () => {
-                    resolve(data);
-                });
+function fgGtagToUUID(gamertag) {
+    return new Promise((resolve, reject) => {
+        const apiReq = https.request(`https://floodgate-uuid.heathmitchell1.repl.co/uuid?gamertag=${gamertag}`, (res) => {
+            let data = '';
+            res.on('data', function (stream) {
+                data += stream;
             });
-            req.end();
+            res.on('end', function () {
+                if (data.includes('User not found')) return resolve(null);
+                resolve(data.split(' is ')[1]);
+            });
         });
-
-    } catch (error) {
-        if (error === 404) {
-            return null;
-        }
-    }
+        apiReq.end();
+    });
 }
 
 function mojangNameToUUID(username) {
@@ -144,7 +97,7 @@ router.post('/interactions', async function (req, res) {
             switch (req.body.data.name) {
                 case 'whitelist':
                     let conn = await dbpool.getConnection();
-                    let message = '';
+                    let message = `Something went wrong, please react to \`Angel SMP Support\` in <#${helpChannelID}> for help.`;
                     let ephermeral = true;
 
                     let username = undefined;
@@ -172,7 +125,7 @@ router.post('/interactions', async function (req, res) {
 
                     const lastWhiteList = lastWhiteListDB.length > 0 ? lastWhiteListDB[0]['time_accessed'] : joined;
 
-                    debug(lastWhiteList);
+                    // debug(lastWhiteList);
 
                     let tcon = {};
                     tcon.second = 1000;
@@ -182,7 +135,6 @@ router.post('/interactions', async function (req, res) {
                     tcon.year = tcon.day * 365;
 
                     let activityRequirement = lastWhiteList.getTime() + tcon.day * 3 <= Date.now();
-                    const helpChannelID = process.env.DISCORD_HELP_CHANNEL;
 
                     if (!activityRequirement) {
                         if (!lastWhiteListDB) {
@@ -210,8 +162,7 @@ router.post('/interactions', async function (req, res) {
                                 await conn.query('INSERT INTO `User` (`discord_id`, `mc_username`, `platform`, `mc_uuid`) VALUES (?, ?, "java", ?);', [req.body.member.user.id, username, uuid]);
                             }
                         } else if (platform === 'bedrock') {
-                            let uuid = xuidToUuid(await usernameToXuid(username));
-
+                            let uuid = await fgGtagToUUID(username);
                             if (uuid === null) {
                                 message = `Could not find that username (\`${username}\`), please check your username and spelling, then try again.`;
                             } else {
@@ -224,10 +175,10 @@ router.post('/interactions', async function (req, res) {
                                 }
                             }
                         } else {
-                            message = `Something went wrong, please react to \`Angel SMP Support\` in <@#${helpChannelID}> for help.`;
+                            message = `Something went wrong, please react to \`Angel SMP Support\` in <#${helpChannelID}> for help.`;
                         }
                     }
-
+                    
                     res.status(200).json({
                         'type': 4,
                         'data': {
