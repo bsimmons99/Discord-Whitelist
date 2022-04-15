@@ -142,7 +142,9 @@ router.post('/interactions', async function (req, res) {
                         } else {
                             message = `You need to wait at least 3 days to be whitelist another account on the SMP.\nYou can whitelist again in <t:${Math.ceil((lastWhiteList.getTime() + tcon.day * 3) / 1000)}:R>.`;
                         }
-                    } else if (username.match(/[^A-z0-9_]/g)) {
+                    } else if (platform === 'java' && username.match(/[^A-z0-9_]/g)) {
+                        message = `You have special characters in your username, these aren't allowed.\nOnly allowed are \`A-z\`, \`0-9\`, and \`_\``;
+                    } else if (platform === 'bedrock' && username.match(/[^A-z0-9_ ]/g)) {
                         message = `You have special characters in your username, these aren't allowed.\nOnly allowed are \`A-z\`, \`0-9\`, and \`_\``;
                     } else if (username.length > 16 || username.length < 3) {
                         message = `Your username is too long or too short, it must be between 3 and 16 characters.`;
@@ -162,8 +164,8 @@ router.post('/interactions', async function (req, res) {
                                 await conn.query('INSERT INTO `User` (`discord_id`, `mc_username`, `platform`, `mc_uuid`) VALUES (?, ?, "java", ?);', [req.body.member.user.id, username, uuid]);
                             }
                         } else if (platform === 'bedrock') {
-                            let uuid = await fgGtagToUUID(username);
-                            if (uuid === null) {
+                            let uuid = await fgGtagToUUID(username.replace(' ', '')); //Remove spaces from bedrock username
+                            if (uuid === null) { //Could not find player
                                 message = `Could not find that username (\`${username}\`), please check your username and spelling, then try again.`;
                             } else {
                                 const rconResponse = await rcon.send(`fwhitelist add ${uuid}`);
@@ -212,7 +214,7 @@ async function registerCommands() {
     const token = JSON.parse(await getToken());
     // debug(token);
 
-    const guild_id = '266167522988916736'; //Sanctuary
+    // const guild_id = '266167522988916736'; //Sanctuary
     // const url = `https://discord.com/api/v8/applications/${APPLICATION_ID}/guilds/${guild_id}/commands`;
     // const url = `https://discord.com/api/v8/applications/${APPLICATION_ID}/commands`;
 
